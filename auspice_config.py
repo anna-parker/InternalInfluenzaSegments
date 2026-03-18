@@ -3,7 +3,7 @@ import json
 import argparse
 
 MAINTAINERS = ["Anna Parker"]
-BUILD_URL = "https://github.com/anna-parker/InfluenzaAReferenceDB"
+BUILD_URL = "https://github.com/anna-parker/InternalInfluenzaSegments"
 PANELS = ["tree", "entropy"]
 
 
