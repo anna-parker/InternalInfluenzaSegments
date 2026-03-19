@@ -46,13 +46,15 @@ SEGMENTS = ["seg1", "seg2", "seg3", "seg5", "seg7", "seg8"]
 
 SEGMENT_SUBTYPES = ["h1n1pdm", "h1n1", "h3n2", "h2n2"]
 
+
 def build_filter(segment):
     params = [
         ("dataUseTerms", "OPEN"),
         ("segments", ",".join(f"{segment}-{subtype}" for subtype in SEGMENT_SUBTYPES)),
         ("versionStatus", "LATEST_VERSION"),
         ("isRevocation", "false"),
-        (f"length_{segment}From", "1"),
+        (f"length_{segment}From", "100"),
+        ("hostNameScientific", "Homo sapiens"),
     ]
 
     return urlencode(params)
@@ -71,7 +73,8 @@ def fasta_url(wildcards):
 
 rule all:
     input:
-        expand("results/assignment_differences_{segment}.tsv", segment=SEGMENTS),
+        expand("results/diamonddifferences_{segment}.tsv", segment=SEGMENTS),
+        expand("results/sortdifferences_{segment}.tsv", segment=SEGMENTS)
 
 
 rule download_sequences:
@@ -83,6 +86,7 @@ rule download_sequences:
         """
         curl -L "{params.url}" -o {output.fasta}
         """
+
 
 rule align:
     input:
@@ -100,6 +104,7 @@ rule align:
             --server {params.dataset_server} \
             --dataset-name {params.dataset_name} \
         """
+
 
 rule process_alignments:
     input:
@@ -123,6 +128,7 @@ rule process_alignments:
             --output {output.merged}
         """
 
+
 rule download_diamond_db:
     output:
         diamond="results/diamond.dmnd",
@@ -132,6 +138,7 @@ rule download_diamond_db:
         """
         curl -L "{params.url}" -o {output.diamond}
         """
+
 
 rule run_diamond:
     input:
@@ -148,13 +155,44 @@ rule run_diamond:
             --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
         """
 
-rule find_assignment_differences:
+
+rule nextclade_sort:
+    input:
+        sequences="results/segment_{segment}.fasta",
+        minimizer="minimizer.json",
+    output:
+        results="results/sort_{segment}.tsv",
+    shell:
+        """
+        nextclade sort -m {input.minimizer} \
+        -r {output.results}  {input.sequences} \
+        --max-score-gap 0.3 --min-score 0.05 --min-hits 2  --all-matches
+        """
+
+
+rule find_sort_differences:
+    input:
+        sort_output="results/sort_{segment}.tsv",
+        alignment_results="results/nextclade_{segment}.tsv",
+        script="find_sort_differences.py",
+    output:
+        differences="results/sortdifferences_{segment}.tsv",
+    shell:
+        """
+        python {input.script} \
+            --sort {input.sort_output} \
+            --alignment {input.alignment_results} \
+            --output {output.differences}
+        """
+
+
+rule find_diamond_differences:
     input:
         diamond_output="results/diamond_{segment}.tsv",
         alignment_results="results/nextclade_{segment}.tsv",
-        script="find_assignment_differences.py",
+        script="find_diamond_differences.py",
     output:
-        differences="results/assignment_differences_{segment}.tsv",
+        differences="results/diamonddifferences_{segment}.tsv",
     shell:
         """
         python {input.script} \

@@ -26,12 +26,34 @@ SequenceIdentifier = "seqName"
 @click.option("--output", required=True, type=click.Path(exists=False))
 def main(alignment: str, diamond: str, output: str) -> None:
     align_results = pd.read_csv(alignment, sep="\t")
-    diamond_results = pd.read_csv(diamond, sep="\t")
-    diamond_results[DiamondDataSetIdentifier] = diamond_results[DiamondDataSetIdentifier].str.replace(
-        r"\|CDS\d+$",
-        "",
-        regex=True,
-    ).replace(r"^seg\d_", "", regex=True)
+    diamond_results = pd.read_csv(
+        diamond,
+        header=None,
+        names=[
+            SequenceIdentifier,
+            DiamondDataSetIdentifier,
+            "pident",
+            "length",
+            "mismatch",
+            "gapopen",
+            "qstart",
+            "qend",
+            "sstart",
+            "send",
+            "evalue",
+            "bitscore",
+        ],
+        sep="\t",
+    )
+    diamond_results[DiamondDataSetIdentifier] = (
+        diamond_results[DiamondDataSetIdentifier]
+        .str.replace(
+            r"\|CDS\d+$",
+            "",
+            regex=True,
+        )
+        .replace(r"^seg\d-", "", regex=True)
+    )
 
     hits = diamond_results.dropna(subset=["pident"]).sort_values(
         [SequenceIdentifier, "pident"], ascending=[True, False]
