@@ -62,6 +62,7 @@ def main(alignment: str, diamond: str, output: str) -> None:
 
     merged = align_results.merge(best_hits, on=SequenceIdentifier, how="inner")
     mismatches = merged[merged[DiamondDataSetIdentifier] != merged["segment"]]
+    mismatches = mismatches.rename(columns={"segment": "alignmentAssignedSegment", DiamondDataSetIdentifier: "diamondAssignedSegment"})
     mismatches.to_csv(output, sep="\t", index=False)
 
 

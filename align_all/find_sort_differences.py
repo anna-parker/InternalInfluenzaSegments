@@ -47,6 +47,7 @@ def main(alignment: str, sort: str, output: str) -> None:
 
     merged = align_results.merge(best_hits, on=SequenceIdentifier, how="inner")
     mismatches = merged[merged[DataSetIdentifier] != merged["segment"]]
+    mismatches = mismatches.rename(columns={"segment": "alignmentAssignedSegment", DataSetIdentifier: "sortAssignedSegment"})
     mismatches.to_csv(output, sep="\t", index=False)
 
 

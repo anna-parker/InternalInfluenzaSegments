@@ -1,4 +1,4 @@
-seqName	segment	index	dataset	score	numHits
+seqName	alignmentAssignedSegment	index	sortAssignedSegment	score	numHits
 LOC_0000T31.1	h1n1	57	h2n2	0.3940886699507389	160
 LOC_0000T4Z.1	h1n1	58	h2n2	0.3940886699507389	160
 LOC_0000T6V.1	h1n1	60	h2n2	0.3990147783251231	162

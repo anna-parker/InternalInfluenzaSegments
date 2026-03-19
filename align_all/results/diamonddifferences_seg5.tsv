@@ -1,4 +1,4 @@
-seqName	segment	dataset	pident	length	mismatch	gapopen	qstart	qend	sstart	send	evalue	bitscore
+seqName	alignmentAssignedSegment	diamondAssignedSegment	pident	length	mismatch	gapopen	qstart	qend	sstart	send	evalue	bitscore
 LOC_00004B8.1	h2n2	h1n1	91.3	172	15	0	2	517	226	397	1.2900000000000002e-110	317
 LOC_00004C6.1	h2n2	h1n1	90.3	154	15	0	2	463	226	379	2.59e-96	280
 LOC_00004D4.1	h2n2	h3n2	91.2	147	13	0	2	442	226	372	1.59e-93	272
