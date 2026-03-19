@@ -1,6 +1,9 @@
+from urllib.parse import urlencode
+
 LAPIS_URL = "https://lapis-virus4.loculus.org/influenza-a/sample/"
 
 SEGMENTS = ["seg1", "seg2", "seg3", "seg5", "seg7", "seg8"]
+
 TSV_FIELDS = [
     "accessionVersion",
     "geoLocCountry",
@@ -33,6 +36,7 @@ TSV_FIELDS = [
     "insdcAccessionFull_seg8",
     "sampleCollectionDate",
 ]
+
 TRAITS = [
     "geoLocCountry",
     "subtypeHA",
@@ -47,20 +51,54 @@ TRAITS = [
     "reference_seg8",
 ]
 
-FILTER = "dataUseTerms=OPEN&segments={segment}-h1n1pdm%2C{segment}-h1n1%2C{segment}-h3n2%2C{segment}-h2n2&versionStatus=LATEST_VERSION&isRevocation=false&completeness_{segment}From=0.9&hostNameScientific=Homo+sapiens&length_{segment}From=1&length_seg4From=1&length_seg6From=1&subtypeHA=H1&subtypeHA=H2&subtypeHA=H3&subtypeNA=N1&subtypeNA=N2"
-TSV_FIELDS_URL_STRING = "%2C".join(TSV_FIELDS)
 TRAITS_STRING = " ".join(TRAITS)
 FIELDS_STRING = " ".join(TSV_FIELDS)
-FASTA_URL_TEMPLATE = f"{LAPIS_URL}unalignedNucleotideSequences?downloadAsFile=true&downloadFileBasename=influenza-a_nuc-seg1_2026-03-16T1639&fastaHeaderTemplate=%7BaccessionVersion%7D&{FILTER}"
-METADATA_URL_TEMPLATE = f"{LAPIS_URL}details?downloadAsFile=true&downloadFileBasename=influenza-a_metadata_2026-03-16T1549&{FILTER}&dataFormat=tsv&fields={TSV_FIELDS_URL_STRING}"
+TSV_FIELDS_URL_STRING = "%2C".join(TSV_FIELDS)
+
+SEGMENT_SUBTYPES = ["h1n1pdm", "h1n1", "h3n2", "h2n2"]
+HA_SUBTYPES = ["H1", "H2", "H3"]
+NA_SUBTYPES = ["N1", "N2"]
+
+def build_filter(segment):
+    params = [
+        ("dataUseTerms", "OPEN"),
+        ("segments", ",".join(f"{segment}-{subtype}" for subtype in SEGMENT_SUBTYPES)),
+        ("versionStatus", "LATEST_VERSION"),
+        ("isRevocation", "false"),
+        (f"completeness_{segment}From", "0.5"),
+        ("hostNameScientific", "Homo sapiens"),
+        (f"length_{segment}From", "1"),
+        ("length_seg4From", "1"),
+        ("length_seg6From", "1"),
+    ]
+
+    params.extend(("subtypeHA", subtype) for subtype in HA_SUBTYPES)
+    params.extend(("subtypeNA", subtype) for subtype in NA_SUBTYPES)
+
+    return urlencode(params)
 
 
 def fasta_url(wildcards):
-    return FASTA_URL_TEMPLATE.format(segment=wildcards.segment)
+    filter_string = build_filter(wildcards.segment)
+    return (
+        f"{LAPIS_URL}unalignedNucleotideSequences"
+        f"?downloadAsFile=true"
+        f"&downloadFileBasename=influenza-a_nuc-{wildcards.segment}_2026-03-16T1639"
+        f"&fastaHeaderTemplate=%7BaccessionVersion%7D"
+        f"&{filter_string}"
+    )
 
 
 def metadata_url(wildcards):
-    return METADATA_URL_TEMPLATE.format(segment=wildcards.segment)
+    filter_string = build_filter(wildcards.segment)
+    return (
+        f"{LAPIS_URL}details"
+        f"?downloadAsFile=true"
+        f"&downloadFileBasename=influenza-a_metadata_{wildcards.segment}_2026-03-16T1549"
+        f"&{filter_string}"
+        f"&dataFormat=tsv"
+        f"&fields={TSV_FIELDS_URL_STRING}"
+    )
 
 
 rule all:
@@ -135,44 +173,6 @@ rule refine_trees:
         """
 
 
-rule ancestral:
-    message:
-        "Reconstructing ancestral sequences and mutations"
-    input:
-        tree="results/segments/refined_tree_{segment}.nwk",
-        alignment="results/segments/aligned_segment_{segment}.fasta",
-    output:
-        node_data="results/nt_muts_{segment}.json",
-    params:
-        inference="joint",
-    shell:
-        """
-        augur ancestral \
-            --tree {input.tree} \
-            --alignment {input.alignment} \
-            --output-node-data {output.node_data} \
-        """
-
-
-# rule translate:
-#     message:
-#         "Translating amino acid sequences"
-#     input:
-#         tree=rules.refine.output.tree,
-#         node_data=rules.ancestral.output.node_data,
-#         reference=reference_gff3,
-#     output:
-#         node_data="results/aa_muts.json",
-#     shell:
-#         """
-#         augur translate \
-#             --tree {input.tree} \
-#             --ancestral-sequences {input.node_data} \
-#             --reference-sequence {input.reference} \
-#             --output-node-data {output.node_data} \
-#         """
-
-
 rule traits:
     input:
         tree="results/segments/refined_tree_{segment}.nwk",
@@ -219,7 +219,7 @@ rule export:
         augur export v2 \
             --tree {input.tree} \
             --metadata {input.metadata} \
-            --node-data {input.traits} {input.nt_muts} \
+            --node-data {input.traits} \
             --output {output.auspice_json} \
             --metadata-id-columns "accessionVersion"  \
             --auspice-config {input.auspice_config}

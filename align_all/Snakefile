@@ -1,0 +1,164 @@
+from urllib.parse import urlencode
+
+LAPIS_URL = "https://lapis-virus4.loculus.org/influenza-a/sample/"
+DIAMOND_DB_URL = "https://loculus-project.github.io/diamond-reference-databases/results/influenza-a/diamond.dmnd"
+DATASET_SERVER = "https://data.clades.nextstrain.org/v3"
+dataset_name_map = {
+    "seg1": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/pb2",
+        "h1n1": "nextstrain/flu/h1n1/pb2",
+        "h3n2": "nextstrain/flu/h3n2/pb2",
+        "h2n2": "nextstrain/flu/h2n2/pb2",
+    },
+    "seg2": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/pb1",
+        "h1n1": "nextstrain/flu/h1n1/pb1",
+        "h3n2": "nextstrain/flu/h3n2/pb1",
+        "h2n2": "nextstrain/flu/h2n2/pb1",
+    },
+    "seg3": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/pa",
+        "h1n1": "nextstrain/flu/h1n1/pa",
+        "h3n2": "nextstrain/flu/h3n2/pa",
+        "h2n2": "nextstrain/flu/h2n2/pa",
+    },
+    "seg5": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/np",
+        "h1n1": "nextstrain/flu/h1n1/np",
+        "h3n2": "nextstrain/flu/h3n2/np",
+        "h2n2": "nextstrain/flu/h2n2/np",
+    },
+    "seg7": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/mp",
+        "h1n1": "nextstrain/flu/h1n1/mp",
+        "h3n2": "nextstrain/flu/h3n2/mp",
+        "h2n2": "nextstrain/flu/h2n2/mp",
+    },
+    "seg8": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/ns",
+        "h1n1": "nextstrain/flu/h1n1/ns",
+        "h3n2": "nextstrain/flu/h3n2/ns",
+        "h2n2": "nextstrain/flu/h2n2/ns",
+    },
+}
+
+SEGMENTS = ["seg1", "seg2", "seg3", "seg5", "seg7", "seg8"]
+
+SEGMENT_SUBTYPES = ["h1n1pdm", "h1n1", "h3n2", "h2n2"]
+
+def build_filter(segment):
+    params = [
+        ("dataUseTerms", "OPEN"),
+        ("segments", ",".join(f"{segment}-{subtype}" for subtype in SEGMENT_SUBTYPES)),
+        ("versionStatus", "LATEST_VERSION"),
+        ("isRevocation", "false"),
+        (f"length_{segment}From", "1"),
+    ]
+
+    return urlencode(params)
+
+
+def fasta_url(wildcards):
+    filter_string = build_filter(wildcards.segment)
+    return (
+        f"{LAPIS_URL}unalignedNucleotideSequences"
+        f"?downloadAsFile=true"
+        f"&downloadFileBasename=influenza-a_nuc-{wildcards.segment}_2026-03-16T1639"
+        f"&fastaHeaderTemplate=%7BaccessionVersion%7D"
+        f"&{filter_string}"
+    )
+
+
+rule all:
+    input:
+        expand("results/assignment_differences_{segment}.tsv", segment=SEGMENTS),
+
+
+rule download_sequences:
+    output:
+        fasta="results/segment_{segment}.fasta",
+    params:
+        url=fasta_url,
+    shell:
+        """
+        curl -L "{params.url}" -o {output.fasta}
+        """
+
+rule align:
+    input:
+        sequences="results/segment_{segment}.fasta",
+    output:
+        results="results/aligned_{segment}_{subtype}.tsv",
+    params:
+        dataset_server=DATASET_SERVER,
+        dataset_name=lambda w: dataset_name_map[w.segment][w.subtype],
+    shell:
+        """
+        nextclade run \
+            {input.sequences} \
+            --output-tsv {output.results} \
+            --server {params.dataset_server} \
+            --dataset-name {params.dataset_name} \
+        """
+
+rule process_alignments:
+    input:
+        results=lambda w: expand(
+            "results/aligned_{segment}_{subtype}.tsv",
+            segment=w.segment,
+            subtype=SEGMENT_SUBTYPES,
+        ),
+        script="parse_alignment_output.py",
+    output:
+        merged="results/nextclade_{segment}.tsv",
+    params:
+        segment_paths=lambda w: " ".join(
+            f"--alignment-results results/aligned_{w.segment}_{subtype}.tsv"
+            for subtype in SEGMENT_SUBTYPES
+        ),
+    shell:
+        """
+        python {input.script} \
+            {params.segment_paths} \
+            --output {output.merged}
+        """
+
+rule download_diamond_db:
+    output:
+        diamond="results/diamond.dmnd",
+    params:
+        url=DIAMOND_DB_URL,
+    shell:
+        """
+        curl -L "{params.url}" -o {output.diamond}
+        """
+
+rule run_diamond:
+    input:
+        sequences="results/segment_{segment}.fasta",
+        diamond_db="results/diamond.dmnd",
+    output:
+        diamond_output="results/diamond_{segment}.tsv",
+    shell:
+        """
+        diamond blastx \
+            --query {input.sequences} \
+            --db {input.diamond_db} \
+            --out {output.diamond_output} \
+            --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
+        """
+
+rule find_assignment_differences:
+    input:
+        diamond_output="results/diamond_{segment}.tsv",
+        alignment_results="results/nextclade_{segment}.tsv",
+        script="find_assignment_differences.py",
+    output:
+        differences="results/assignment_differences_{segment}.tsv",
+    shell:
+        """
+        python {input.script} \
+            --diamond {input.diamond_output} \
+            --alignment {input.alignment_results} \
+            --output {output.differences}
+        """
