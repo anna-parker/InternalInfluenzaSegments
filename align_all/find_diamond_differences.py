@@ -52,7 +52,7 @@ def main(alignment: str, diamond: str, output: str) -> None:
             "",
             regex=True,
         )
-        .replace(r"^seg\d-", "", regex=True)
+        .replace(r"^seg\d-", "", regex=True).replace(r"-CY163681", "", regex=True).replace(r"-CY163685", "", regex=True).replace(r"-CY163683", "", regex=True).replace(r"-CY163684", "", regex=True).replace(r"-CY163685", "", regex=True).replace(r"-CY163686", "", regex=True).replace(r"-CY163687", "", regex=True).replace(r"-CY163688", "", regex=True).replace(r"-CY163689", "", regex=True).replace(r"-CY163690", "", regex=True).replace(r"-CY163691", "", regex=True).replace(r"-CY163692", "", regex=True).replace(r"-CY163693", "", regex=True).replace(r"-CY163694", "", regex=True).replace(r"-CY163695", "", regex=True).replace(r"-CY163696", "", regex=True).replace(r"-CY163697", "", regex=True).replace(r"-CY163698", "", regex=True).replace(r"-CY163699", "", regex=True)
     )
 
     hits = diamond_results.dropna(subset=["pident"]).sort_values(

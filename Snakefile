@@ -49,10 +49,10 @@ TRAITS = [
     "reference_seg6",
     "reference_seg7",
     "reference_seg8",
+    "has_errors",
 ]
 
 TRAITS_STRING = " ".join(TRAITS)
-FIELDS_STRING = " ".join(TSV_FIELDS)
 TSV_FIELDS_URL_STRING = "%2C".join(TSV_FIELDS)
 
 SEGMENT_SUBTYPES = ["h1n1pdm", "h1n1", "h3n2", "h2n2"]
@@ -138,10 +138,61 @@ rule subsample_segments:
         seqkit sample -n 1000 -2 --out-file {output.subsampled_fasta} {input.fasta}
         """
 
+rule add_missing_sequences:
+    input:
+        differences="diamonddifferences_{segment}.tsv",
+        main="results/segment_{segment}.fasta",
+        subsampled="results/segments/sample_segment_{segment}.fasta"
+    params:
+        segment="{segment}",
+    output:
+        added="results/segments/subsampled_updated_{segment}.fasta"
+    shell:
+        r"""
+        # extract seqNames from TSV (skip header)
+        cut -f1 {input.differences} | tail -n +2 > results/wanted_ids_{params.segment}.txt
+
+        # extract existing IDs from subsampled fasta
+        seqkit seq -n {input.subsampled} > results/existing_ids_{params.segment}.txt
+
+        # find missing IDs
+        grep -Fxv -f results/existing_ids_{params.segment}.txt results/wanted_ids_{params.segment}.txt > results/missing_ids_{params.segment}.txt
+
+        # extract missing sequences from main fasta
+        seqkit grep -f results/missing_ids_{params.segment}.txt {input.main} > results/missing_sequences_{params.segment}.fasta
+
+        # combine old + new
+        cat {input.subsampled} results/missing_sequences_{params.segment}.fasta > {output.added}
+        """
+
+rule add_has_errors_column:
+    input:
+        metadata="results/metadata_{segment}.tsv",
+        flagged="diamonddifferences_{segment}.tsv"
+    params:
+        segment="{segment}",
+    output:
+        "results/metadataWithErrors_{segment}.tsv"
+    shell:
+        r"""
+        cut -f1 {input.flagged} | tail -n +2 > results/error_ids_{params.segment}.txt
+
+        awk 'BEGIN{{FS=OFS="\t"}}
+             NR==FNR {{error[$1]=1; next}}
+             FNR==1 {{
+                 print $0, "has_errors"
+                 next
+             }}
+             {{
+                 flag = ($1 in error) ? "yes" : "no"
+                 print $0, flag
+             }}' results/error_ids_{params.segment}.txt {input.metadata} > {output}
+        """
+
 
 rule align_segments:
     input:
-        reference_genome="results/segments/sample_segment_{segment}.fasta",
+        reference_genome="results/segments/subsampled_updated_{segment}.fasta",
     output:
         aligned_fasta="results/segments/aligned_segment_{segment}.fasta",
     shell:
@@ -176,7 +227,7 @@ rule refine_trees:
 rule traits:
     input:
         tree="results/segments/refined_tree_{segment}.nwk",
-        metadata="results/metadata_{segment}.tsv",
+        metadata="results/metadataWithErrors_{segment}.tsv",
     output:
         traits="results/segments/traits_{segment}.json",
     shell:
@@ -191,7 +242,7 @@ rule traits:
 rule create_auspice_config:
     input:
         tree="results/segments/refined_tree_{segment}.nwk",
-        metadata="results/metadata_{segment}.tsv",
+        metadata="results/metadataWithErrors_{segment}.tsv",
     output:
         auspice_config="config/config_{segment}.json",
     params:
@@ -200,7 +251,7 @@ rule create_auspice_config:
         """
         python auspice_config.py \
             --title "Influenza A Segment {params.segment}" \
-            --traits {FIELDS_STRING} \
+            --traits {TRAITS_STRING} \
             --output {output.auspice_config}
         """
 
@@ -208,7 +259,7 @@ rule create_auspice_config:
 rule export:
     input:
         tree="results/segments/refined_tree_{segment}.nwk",
-        metadata="results/metadata_{segment}.tsv",
+        metadata="results/metadataWithErrors_{segment}.tsv",
         traits="results/segments/traits_{segment}.json",
         auspice_config="config/config_{segment}.json",
         nt_muts="results/nt_muts_{segment}.json",

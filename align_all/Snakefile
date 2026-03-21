@@ -128,22 +128,10 @@ rule process_alignments:
             --output {output.merged}
         """
 
-
-rule download_diamond_db:
-    output:
-        diamond="results/diamond.dmnd",
-    params:
-        url=DIAMOND_DB_URL,
-    shell:
-        """
-        curl -L "{params.url}" -o {output.diamond}
-        """
-
-
 rule run_diamond:
     input:
         sequences="results/segment_{segment}.fasta",
-        diamond_db="results/diamond.dmnd",
+        diamond_db="diamond.dmnd",
     output:
         diamond_output="results/diamond_{segment}.tsv",
     shell:
