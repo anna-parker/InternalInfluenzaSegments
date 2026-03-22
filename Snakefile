@@ -140,7 +140,7 @@ rule subsample_segments:
 
 rule add_missing_sequences:
     input:
-        differences="diamonddifferences_{segment}.tsv",
+        differences="align_all/results/diamonddifferences_{segment}.tsv",
         main="results/segment_{segment}.fasta",
         subsampled="results/segments/sample_segment_{segment}.fasta"
     params:
@@ -168,7 +168,7 @@ rule add_missing_sequences:
 rule add_has_errors_column:
     input:
         metadata="results/metadata_{segment}.tsv",
-        flagged="diamonddifferences_{segment}.tsv"
+        flagged="align_all/results/diamonddifferences_{segment}.tsv"
     params:
         segment="{segment}",
     output:
