@@ -20,7 +20,7 @@ import pandas as pd
 def main(alignment_results: list[str], output: str) -> None:
     all_dfs = [pd.read_csv(file, sep="\t") for file in alignment_results]
     for i in range(len(alignment_results)):
-        all_dfs[i]["segment"] = alignment_results[i].split("_")[-1].split(".")[0]
+        all_dfs[i]["segment"] = "_".join(alignment_results[i].split(".")[0].split("_")[2:4])
     df_combined = pd.concat(all_dfs, ignore_index=True)
 
     df_combined = df_combined.dropna(subset=["alignmentScore"])

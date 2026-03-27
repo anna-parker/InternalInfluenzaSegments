@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-LAPIS_URL = "https://lapis-virus4.loculus.org/influenza-a/sample/"
+TAXON_ID=197911
 DIAMOND_DB_URL = "https://loculus-project.github.io/diamond-reference-databases/results/influenza-a/diamond.dmnd"
 DATASET_SERVER = "https://data.clades.nextstrain.org/v3"
 GS_DATASET_SERVER = "https://raw.githubusercontent.com/genspectrum/nextclade-datasets/flu/data"
@@ -97,56 +97,111 @@ datasets_in_gs_server = {
     }
 }
 
-SEGMENTS = ["seg4", "seg6"]
+SEGMENTS = ["seg1", "seg2", "seg3", "seg4", "seg5", "seg6", "seg7", "seg8"]
 wildcard_constraints:
     segment = r"seg\d+"
 
-def build_filter(segment):
-    params = [
-        ("dataUseTerms", "OPEN"),
-        ("segments", ",".join(f"{segment}-{subtype}"for subtype in dataset_name_map[segment].keys())),
-        ("versionStatus", "LATEST_VERSION"),
-        ("isRevocation", "false"),
-        (f"length_{segment}From", "100"),
-        # ("hostNameScientific", "Homo sapiens"),
-    ]
 
-    return urlencode(params)
-
-
-def fasta_url(wildcards):
-    filter_string = build_filter(wildcards.segment)
-    return (
-        f"{LAPIS_URL}unalignedNucleotideSequences"
-        f"?downloadAsFile=true"
-        f"&downloadFileBasename=influenza-a_nuc-{wildcards.segment}_2026-03-16T1639"
-        f"&fastaHeaderTemplate=%7BaccessionVersion%7D"
-        f"&{filter_string}"
-    )
+if os.uname().sysname == "Darwin":
+    # Don't use conda-forge unzip on macOS
+    # Due to https://github.com/conda-forge/unzip-feedstock/issues/16
+    unzip = "/usr/bin/unzip"
+else:
+    unzip = "unzip"
 
 
 rule all:
     input:
-        expand("results/diamonddifferences_{segment}.tsv", segment=SEGMENTS),
-        expand("results/sortdifferences_{segment}.tsv", segment=SEGMENTS)
+        [
+            f"results/aligned_{segment}-{subtype}.tsv"
+            for segment in SEGMENTS
+            for subtype in dataset_name_map[segment].keys()
+        ] + [
+                f"results/unaligned_{segment}-{subtype}_filtered.tsv"
+                for segment in SEGMENTS
+                for subtype in dataset_name_map[segment].keys()
+            ]
 
 
 rule download_sequences:
     output:
-        fasta="results/segment_{segment}.fasta",
+        dataset_report="results/ncbi_dataset/data/data_report.jsonl",
+        dataset_sequences="results/ncbi_dataset/data/genomic.fna",
     params:
-        url=fasta_url,
+        taxon_id=TAXON_ID,
+        unzip=unzip,
+        dataset_package=directory("results/ncbi_dataset"),
+        compressed_package_tzst="results/dataset.tar.zst",
+        compressed_package_zip="results/dataset.zip",
     shell:
         """
-        curl -L "{params.url}" -o {output.fasta}
+        datasets download virus genome taxon {params.taxon_id} \
+            --no-progressbar \
+            --filename {params.compressed_package_zip} \
+        && {params.unzip} \
+            -o {params.compressed_package_zip} \
+            -d results
+        """
+
+rule format_ncbi_dataset_sequences:
+    input:
+        dataset_sequences="results/ncbi_dataset/data/genomic.fna",
+    output:
+        ncbi_dataset_sequences="results/sequences.fasta",
+    shell:
+        """
+        seqkit seq -w0 -i \
+            {input.dataset_sequences} \
+            > {output.ncbi_dataset_sequences}
+        echo "Stats of NCBI dataset sequences: $(seqkit stats {output.ncbi_dataset_sequences})"
+        echo "seqkit hash of NCBI dataset sequences: $(seqkit sum -a -s {output.ncbi_dataset_sequences})"
+        echo "Plain hash of NCBI dataset sequences: $(md5sum {output.ncbi_dataset_sequences})"
+        """
+
+rule nextclade_sort:
+    input:
+        sequences="results/sequences.fasta",
+        minimizer="minimizer.json",
+    output:
+        results="results/sort.tsv",
+    shell:
+        """
+        nextclade sort -m {input.minimizer} \
+        -r {output.results}  {input.sequences} \
+        --max-score-gap 0.3 --min-score 0.05 --min-hits 2  --all-matches
+        """
+
+rule parse_nextclade_sort:
+    input:
+        sequences="results/sequences.fasta",
+        results="results/sort.tsv",
+        script="parse_sort_output.py",
+    params:
+        segment_paths=lambda w: " ".join(
+            f"--results results/assigned_{segment}-{subtype}.fasta"
+            for segment in SEGMENTS
+            for subtype in dataset_name_map[segment].keys()
+        ),
+    output:
+        results=[
+            f"results/assigned_{segment}-{subtype}.fasta"
+            for segment in SEGMENTS
+            for subtype in dataset_name_map[segment].keys()
+        ]
+    shell:
+        """
+        python {input.script} \
+            --sort-results {input.results} \
+            --sequences {input.sequences} \
+            {params.segment_paths}
         """
 
 
 rule align:
     input:
-        sequences="results/segment_{segment}.fasta",
+        sequences="results/assigned_{segment}-{subtype}.fasta",
     output:
-        results="results/aligned_{segment}_{subtype}.tsv",
+        results="results/aligned_{segment}-{subtype}.tsv",
     params:
         dataset_server=lambda w: GS_DATASET_SERVER if w.subtype in datasets_in_gs_server.get(w.segment, set()) else DATASET_SERVER,
         dataset_name=lambda w: dataset_name_map[w.segment][w.subtype],
@@ -159,86 +214,19 @@ rule align:
             --dataset-name {params.dataset_name} \
         """
 
-
-rule process_alignments:
+rule filter_unaligned:
     input:
-        results=lambda w: expand(
-            "results/aligned_{segment}_{subtype}.tsv",
-            segment=w.segment,
-            subtype=dataset_name_map[w.segment].keys(),
-        ),
-        script="parse_alignment_output.py",
-    output:
-        merged="results/nextclade_{segment}.tsv",
+        aligned="results/aligned_{segment}-{subtype}.tsv",
+        assigned="results/assigned_{segment}-{subtype}.fasta",
     params:
-        segment_paths=lambda w: " ".join(
-            f"--alignment-results results/aligned_{w.segment}_{subtype}.tsv"
-            for subtype in dataset_name_map[w.segment].keys()
-        ),
-    shell:
-        """
-        python {input.script} \
-            {params.segment_paths} \
-            --output {output.merged}
-        """
-
-rule run_diamond:
-    input:
-        sequences="results/segment_{segment}.fasta",
-        diamond_db="diamond.dmnd",
+        segment=lambda w: w.segment,
+        subtype=lambda w: w.subtype,
     output:
-        diamond_output="results/diamond_{segment}.tsv",
+        filtered="results/unaligned_{segment}-{subtype}_filtered.tsv",
     shell:
         """
-        diamond blastx \
-            --query {input.sequences} \
-            --db {input.diamond_db} \
-            --out {output.diamond_output} \
-            --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore
-        """
-
-
-rule nextclade_sort:
-    input:
-        sequences="results/segment_{segment}.fasta",
-        minimizer="minimizer.json",
-    output:
-        results="results/sort_{segment}.tsv",
-    shell:
-        """
-        nextclade sort -m {input.minimizer} \
-        -r {output.results}  {input.sequences} \
-        --max-score-gap 0.3 --min-score 0.05 --min-hits 2  --all-matches
-        """
-
-
-rule find_sort_differences:
-    input:
-        sort_output="results/sort_{segment}.tsv",
-        alignment_results="results/nextclade_{segment}.tsv",
-        script="find_sort_differences.py",
-    output:
-        differences="results/sortdifferences_{segment}.tsv",
-    shell:
-        """
-        python {input.script} \
-            --sort {input.sort_output} \
-            --alignment {input.alignment_results} \
-            --output {output.differences}
-        """
-
-
-rule find_diamond_differences:
-    input:
-        diamond_output="results/diamond_{segment}.tsv",
-        alignment_results="results/nextclade_{segment}.tsv",
-        script="find_diamond_differences.py",
-    output:
-        differences="results/diamonddifferences_{segment}.tsv",
-    shell:
-        """
-        python {input.script} \
-            --diamond {input.diamond_output} \
-            --alignment {input.alignment_results} \
-            --output {output.differences}
+        python unaligned_fasta.py \
+            --alignment-results {input.aligned} \
+            --sequences {input.assigned} \
+            --output {output.filtered}
         """
