@@ -1,0 +1,232 @@
+from urllib.parse import urlencode
+
+TAXON_ID=197911
+DIAMOND_DB_URL = "https://loculus-project.github.io/diamond-reference-databases/results/influenza-a/diamond.dmnd"
+DATASET_SERVER = "https://data.clades.nextstrain.org/v3"
+GS_DATASET_SERVER = "https://raw.githubusercontent.com/genspectrum/nextclade-datasets/flu/data"
+dataset_name_map = {
+    "seg1": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/pb2",
+        "h1n1": "nextstrain/flu/h1n1/pb2",
+        "h3n2": "nextstrain/flu/h3n2/pb2",
+        "h2n2": "nextstrain/flu/h2n2/pb2",
+    },
+    "seg2": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/pb1",
+        "h1n1": "nextstrain/flu/h1n1/pb1",
+        "h3n2": "nextstrain/flu/h3n2/pb1",
+        "h2n2": "nextstrain/flu/h2n2/pb1",
+    },
+    "seg3": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/pa",
+        "h1n1": "nextstrain/flu/h1n1/pa",
+        "h3n2": "nextstrain/flu/h3n2/pa",
+        "h2n2": "nextstrain/flu/h2n2/pa",
+    },
+    "seg4": {
+        "h1_h1n1pdm": "nextstrain/flu/h1n1pdm/ha/CY121680",
+        "h1_h1n1": "nextstrain/flu/h1n1/ha",
+        "h3_h3n2": "nextstrain/flu/h3n2/ha/CY163680",
+        "h2_h2n2": "nextstrain/flu/h2n2/ha",
+        "h3_h3n8": "flu/HA/ha_h3_h3n8/CY028836",
+        "h4_h4n6": "flu/HA/ha_h4_h4n6/CY181241",
+        "h5_h5n1": "community/moncla-lab/iav-h5/ha/all-clades",
+        "h5_h5n2": "flu/HA/ha_h5_h5n2/KU143256",
+        "h6_h6n2": "flu/HA/ha_h6_h6n2/CY130030",
+        "h7_h7n9": "flu/HA/ha_h7_h7n9/NC_026425.1",
+        "h8_h8n4": "flu/HA/ha_h8_h8n4/CY136131",
+        "h9_h9n2": "flu/HA/ha_h9_h9n2/NC_004908.1",
+        "h10_h10n7": "flu/HA/ha_h10_h10n7/CY136094",
+        "h11_h11n9": "flu/HA/ha_h11_h11n9/CY130070",
+        "h12_h12n5": "flu/HA/ha_h12_h12n5/CY130078",
+        "h13_h13n6": "flu/HA/ha_h13_h13n6/CY130086",
+        "h14_h14n5": "flu/HA/ha_h14_h14n5/JN696314",
+        "h15_h15n9": "flu/HA/ha_h15_h15n9/CY006010",
+        "h16_h16n3": "flu/HA/ha_h16_h16n3/CY136630",
+        "h17_h17n10": "flu/HA/ha_h17_h17n10/CY103876",
+        "h18_h18n11": "flu/HA/ha_h18_h18n11/CY125945"
+    },
+    "seg5": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/np",
+        "h1n1": "nextstrain/flu/h1n1/np",
+        "h3n2": "nextstrain/flu/h3n2/np",
+        "h2n2": "nextstrain/flu/h2n2/np",
+    },
+    "seg6": {
+        "n1_h1n1pdm": "nextstrain/flu/h1n1pdm/na/MW626056",
+        "n1_h1n1": "nextstrain/flu/h1n1/na",
+        "n2_h3n2": "nextstrain/flu/h3n2/na/EPI1857215",
+        "n2_h2n2": "nextstrain/flu/h2n2/na",
+        "n1_h5n1": "flu/NA/na_n1_h5n1/NC_007361.1",
+        "n2_h6n2": "flu/NA/na_n2_h6n2/CY130032",
+        "n2_h9n2": "flu/NA/na_n2_h9n2/NC_004909.1",
+        "n2_h5n2": "flu/NA/na_n2_h5n2/KU143347",
+        "n3_h16n3": "flu/NA/na_n3_h16n3/CY136632",
+        "n4_h8n4": "flu/NA/na_n4_h8n4/CY136133",
+        "n5_h12n5": "flu/NA/na_n5_h12n5/CY130080",
+        "n6_h4n6": "flu/NA/na_n6_h4n6/CY181243",
+        "n6_h13n6": "flu/NA/na_n6_h13n6/CY130088",
+        "n7_h10n7": "flu/NA/na_n7_h10n7/CY136096",
+        "n8_h3n8": "flu/NA/na_n8_h3n8/CY028838",
+        "n9_h7n9": "flu/NA/na_n9_h7n9/NC_026429.1",
+        "n9_h11n9": "flu/NA/na_n9_h11n9/CY130072",
+        "n9_h15n9": "flu/NA/na_n9_h15n9/CY005407",
+        "n10_h17n10": "flu/NA/na_n10_h17n10/CY103878",
+        "n11_h18n11": "flu/NA/na_n11_h18n11/CY125947"
+    },
+    "seg7": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/mp",
+        "h1n1": "nextstrain/flu/h1n1/mp",
+        "h3n2": "nextstrain/flu/h3n2/mp",
+        "h2n2": "nextstrain/flu/h2n2/mp",
+    },
+    "seg8": {
+        "h1n1pdm": "nextstrain/flu/h1n1pdm/ns",
+        "h1n1": "nextstrain/flu/h1n1/ns",
+        "h3n2": "nextstrain/flu/h3n2/ns",
+        "h2n2": "nextstrain/flu/h2n2/ns",
+    },
+}
+
+datasets_in_gs_server = {
+    "seg4": {
+        "h3_h3n8", "h4_h4n6", "h5_h5n2", "h6_h6n2", "h7_h7n9", "h8_h8n4", "h9_h9n2", "h10_h10n7", "h11_h11n9", "h12_h12n5", "h13_h13n6", "h14_h14n5", "h15_h15n9", "h16_h16n3", "h17_h17n10", "h18_h18n11"
+    },
+    "seg6": {
+        "n1_h5n1", "n2_h6n2", "n2_h9n2", "n2_h5n2", "n3_h16n3", "n4_h8n4", "n5_h12n5", "n6_h4n6", "n6_h13n6", "n7_h10n7", "n8_h3n8", "n9_h7n9", "n9_h11n9", "n9_h15n9", "n10_h17n10", "n11_h18n11"
+    }
+}
+
+SEGMENTS = ["seg1", "seg2", "seg3", "seg4", "seg5", "seg6", "seg7", "seg8"]
+wildcard_constraints:
+    segment = r"seg\d+"
+
+
+if os.uname().sysname == "Darwin":
+    # Don't use conda-forge unzip on macOS
+    # Due to https://github.com/conda-forge/unzip-feedstock/issues/16
+    unzip = "/usr/bin/unzip"
+else:
+    unzip = "unzip"
+
+
+rule all:
+    input:
+        [
+            f"results/aligned_{segment}-{subtype}.tsv"
+            for segment in SEGMENTS
+            for subtype in dataset_name_map[segment].keys()
+        ] + [
+                f"results/unaligned_{segment}-{subtype}_filtered.tsv"
+                for segment in SEGMENTS
+                for subtype in dataset_name_map[segment].keys()
+            ]
+
+
+rule download_sequences:
+    output:
+        dataset_report="results/ncbi_dataset/data/data_report.jsonl",
+        dataset_sequences="results/ncbi_dataset/data/genomic.fna",
+    params:
+        taxon_id=TAXON_ID,
+        unzip=unzip,
+        dataset_package=directory("results/ncbi_dataset"),
+        compressed_package_tzst="results/dataset.tar.zst",
+        compressed_package_zip="results/dataset.zip",
+    shell:
+        """
+        datasets download virus genome taxon {params.taxon_id} \
+            --no-progressbar \
+            --filename {params.compressed_package_zip} \
+        && {params.unzip} \
+            -o {params.compressed_package_zip} \
+            -d results
+        """
+
+rule format_ncbi_dataset_sequences:
+    input:
+        dataset_sequences="results/ncbi_dataset/data/genomic.fna",
+    output:
+        ncbi_dataset_sequences="results/sequences.fasta",
+    shell:
+        """
+        seqkit seq -w0 -i \
+            {input.dataset_sequences} \
+            > {output.ncbi_dataset_sequences}
+        echo "Stats of NCBI dataset sequences: $(seqkit stats {output.ncbi_dataset_sequences})"
+        echo "seqkit hash of NCBI dataset sequences: $(seqkit sum -a -s {output.ncbi_dataset_sequences})"
+        echo "Plain hash of NCBI dataset sequences: $(md5sum {output.ncbi_dataset_sequences})"
+        """
+
+rule nextclade_sort:
+    input:
+        sequences="results/sequences.fasta",
+        minimizer="minimizer.json",
+    output:
+        results="results/sort.tsv",
+    shell:
+        """
+        nextclade sort -m {input.minimizer} \
+        -r {output.results}  {input.sequences} \
+        --max-score-gap 0.3 --min-score 0.05 --min-hits 2  --all-matches
+        """
+
+rule parse_nextclade_sort:
+    input:
+        sequences="results/sequences.fasta",
+        results="results/sort.tsv",
+        script="parse_sort_output.py",
+    params:
+        segment_paths=lambda w: " ".join(
+            f"--results results/assigned_{segment}-{subtype}.fasta"
+            for segment in SEGMENTS
+            for subtype in dataset_name_map[segment].keys()
+        ),
+    output:
+        results=[
+            f"results/assigned_{segment}-{subtype}.fasta"
+            for segment in SEGMENTS
+            for subtype in dataset_name_map[segment].keys()
+        ]
+    shell:
+        """
+        python {input.script} \
+            --sort-results {input.results} \
+            --sequences {input.sequences} \
+            {params.segment_paths}
+        """
+
+
+rule align:
+    input:
+        sequences="results/assigned_{segment}-{subtype}.fasta",
+    output:
+        results="results/aligned_{segment}-{subtype}.tsv",
+    params:
+        dataset_server=lambda w: GS_DATASET_SERVER if w.subtype in datasets_in_gs_server.get(w.segment, set()) else DATASET_SERVER,
+        dataset_name=lambda w: dataset_name_map[w.segment][w.subtype],
+    shell:
+        """
+        nextclade run \
+            {input.sequences} \
+            --output-tsv {output.results} \
+            --server {params.dataset_server} \
+            --dataset-name {params.dataset_name} \
+        """
+
+rule filter_unaligned:
+    input:
+        aligned="results/aligned_{segment}-{subtype}.tsv",
+        assigned="results/assigned_{segment}-{subtype}.fasta",
+    params:
+        segment=lambda w: w.segment,
+        subtype=lambda w: w.subtype,
+    output:
+        filtered="results/unaligned_{segment}-{subtype}_filtered.tsv",
+    shell:
+        """
+        python unaligned_fasta.py \
+            --alignment-results {input.aligned} \
+            --sequences {input.assigned} \
+            --output {output.filtered}
+        """
